@@ -8,10 +8,12 @@ txt to csv to make it compatible with openlp.
 import os
 import re
 import csv
+import shutil
 from dataclasses import dataclass
 from typing import Optional
 import logging
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -119,7 +121,6 @@ class PyGConverter:
         if chapter_result and next_chapter_result:
             start_index = chapter_result.span()[1] + 1
             end_index = next_chapter_result.span()[0] - 1
-            logger.info(end_index)
             chapter_content = content[start_index:end_index]
             with open(f"chapters/{chapter}.txt", "w") as f:
                 f.write(chapter_content)
@@ -138,7 +139,6 @@ class PyGConverter:
         if search_result:
             end_index = len(content)
             start_index = search_result.span()[1] + 1
-            logger.info(end_index)
             chapter_content = content[start_index:end_index]
             with open(f"chapters/{chapter}.txt", "w") as f:
                 f.write(chapter_content)
@@ -200,12 +200,12 @@ class PyGConverter:
         content = self._read_chapter(chapter_name)
         verses_count = self._count_verses(chapter_name)
         counter = 0
-        csv_name = f"{csv_name}.csv"
+        csv_name = csv_name if csv_name.endswith(".csv") else f"{csv_name}.csv"
         csv_file = open(csv_name, "a+")
-        with open(f"{csv_name}.csv", "a+") as csv_file:
-            with csv.writer(csv_file) as csv_writer:
-                current_verse = 0
-                next_verse = 1
+        with open(csv_name, "a+") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            current_verse = 0
+            next_verse = 1
             while counter < verses_count:
                 current_verse += 1
                 next_verse += 1
@@ -228,39 +228,33 @@ class PyGConverter:
                         new_row = [book_name, chapter_number, current_verse, new_verse]
                         csv_writer.writerow(new_row)
 
-    def _books_gen(self, books: list[Book]):
-        """This function is a generator for
-        books in the book_list"""
-        for book in books:
-            yield book
 
     def create_chapters(self, books: list[Book]):
         """This method creates the chapters
         for all the book of the input"""
 
-        books = self._books_gen(books)
-        next_book = next(books)
-
-        for book in books:
+        for index, book in enumerate(books):
             current_chapter = 1
             next_chapter = 2
             while current_chapter < book.chapters:
                 self.strip_txt_to_chapter(
-                    chapter=f"{book.name} {current_chapter}", next_chapter=f"{book.name} {next_chapter}"
+                    chapter=f"{book.name} {current_chapter}",
+                    next_chapter=f"{book.name} {next_chapter}",
                 )
                 current_chapter += 1
                 next_chapter += 1
             if current_chapter == book.chapters:
                 try:
-                    next_book = next(books)
+                    next_book = books[index + 1]
                     self.strip_txt_to_chapter(
-                        chapter=f"{book.name} {current_chapter}", next_chapter=f"{next_book.name} 1"
+                        chapter=f"{book.name} {current_chapter}",
+                        next_chapter=f"{next_book.name} 1",
                     )
                     current_chapter = 1
                     next_chapter = 2
-                except StopIteration:
+                except IndexError:
                     self._strip_txt_last_chapter(f"{book.name} {book.chapters}")
-                    logger.info("All chapters completely written")
+        logger.info("All chapters completely written")
 
     def chapters_to_csv(self, csv_name: str, books: list[Book]):
         for book in books:
@@ -278,9 +272,14 @@ class PyGConverter:
                 counter += 1
         logger.info(f"Completely added all books to {csv_name}")
 
+    @staticmethod
+    def clean_up():
+        shutil.rmtree("./chapters")
+
 
 if __name__ == "__main__":
     g = PyGConverter()
     g.load_txt_file("x.txt")
     g.create_chapters(BOOKS)
-    g.chapters_to_csv("verses", BOOKS)
+    g.chapters_to_csv("verses.csv", BOOKS)
+    g.clean_up()
